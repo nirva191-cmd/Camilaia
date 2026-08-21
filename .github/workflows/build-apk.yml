@@ -11,6 +11,11 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v4
 
+      - name: Limpiar posibles conflictos de directorios
+        run: |
+          rm -rf build/
+          if [ -d "main.py" ]; then rm -rf main.py; fi
+
       - name: Configurar Java JDK
         uses: actions/setup-java@v4
         with:
