@@ -1,9 +1,11 @@
-import json
 import os
 import string
 import time
 import random
 import difflib
+import json
+import flet as ft
+import shutil
 
 try:
     from android import Android
@@ -75,17 +77,17 @@ class CamilaSoberana:
         try:
             with open(self.archivo_memoria, "w", encoding="utf-8") as f:
                 json.dump(self.datos, f, ensure_ascii=False, indent=2)
+            if MODO_ANDROID:
+                shutil.copy(self.archivo_memoria, f"/sdcard/Download/{self.archivo_memoria}")
         except Exception as e:
             print(f"Aviso de sistema (Memoria): {e}")
 
     def buscar_regla_similar(self, texto, umbral=0.75):
-        """Busca si el texto se parece lo suficiente a alguna regla existente (manejo de typos)."""
         if not self.datos["reglas"]:
             return None
-        
         if texto in self.datos["reglas"]:
             return texto
-            
+        
         mejor_coincidencia = None
         mayor_porcentaje = 0.0
         
@@ -97,7 +99,6 @@ class CamilaSoberana:
                 
         if mayor_porcentaje >= umbral:
             return mejor_coincidencia
-            
         return None
 
     def procesar_pensamiento(self, mensaje_usuario):
@@ -105,13 +106,11 @@ class CamilaSoberana:
         texto_limpio = limpiar_texto(mensaje_usuario)
         respuesta = None
 
-        # 1. CONTROL DE SALIDA DE APRENDIZAJE (Ultra flexible)
         if any(p in texto_limpio for p in ["salir", "modo normal", "terminar", "listo", "sal", "salir de aprendizaje"]):
             self.modo_aprendizaje = False
             self.esperando_respuesta_para = None
             return "🔓 **Modo aprendizaje DESACTIVADO**. Camila ha vuelto a la conversación normal."
 
-        # 2. CAPTURA MÚLTIPLE SEPARADA POR COMAS EN MODO APRENDIZAJE
         if self.modo_aprendizaje and self.esperando_respuesta_para:
             frase_aprender = self.esperando_respuesta_para
             variaciones_ingresadas = [v.strip() for v in mensaje_usuario.split(",") if v.strip()]
@@ -128,17 +127,14 @@ class CamilaSoberana:
             self.guardar_memoria_local()
             total_actual = len(self.datos["reglas"][frase_aprender])
             self.esperando_respuesta_para = None
-            return f"✅ ¡Se agregaron {agregadas} variaciones nuevas! La frase '{frase_aprender}' ahora tiene {total_actual} opciones. Escribe otra frase o di 'salir'."
+            return f"✅ ¡Se agregaron {agregadas} variaciones nuevas! La frase '{frase_aprender}' ahora tiene {total_actual} opciones."
 
-        # 3. ACTIVACIÓN DE MODO APRENDIZAJE
         if "modo aprendizaje" in texto_limpio or texto_limpio in ["aprender", "entrenar"]:
             self.modo_aprendizaje = True
             return "🔒 **Modo aprendizaje ACTIVADO**. Escribe cualquier frase y te pediré las respuestas (separadas por comas)."
 
-        # 4. SI ESTÁ EN MODO APRENDIZAJE Y DA LA FRASE PRINCIPAL
         if self.modo_aprendizaje:
             regla_existente = self.buscar_regla_similar(texto_limpio)
-            
             if regla_existente:
                 self.esperando_respuesta_para = regla_existente
                 total_respuestas = len(self.datos["reglas"][regla_existente])
@@ -147,11 +143,9 @@ class CamilaSoberana:
                 self.esperando_respuesta_para = texto_limpio
                 return f"🤔 No tengo registros previos para '{mensaje_usuario}'. Escribe una o varias respuestas separadas por comas:"
 
-        # 5. FUNCIONES DE SISTEMA (Reloj y Llamadas)
         if any(p in texto_limpio for p in ["que hora es", "la hora", "hora actual"]):
             hora_actual = time.strftime("%H:%M:%S", time.localtime())
             respuesta = f"Reloj del sistema local ➔ Hora: {hora_actual}."
-
         elif "llamar a" in texto_limpio or "marcar a" in texto_limpio:
             contacto = mensaje_usuario.lower().replace("llamar a", "").replace("marcar a", "").strip()
             if MODO_ANDROID:
@@ -162,8 +156,6 @@ class CamilaSoberana:
                     respuesta = f"No se pudo ejecutar la llamada: {e}"
             else:
                 respuesta = f"[Modo Consola] Orden de llamada hacia '{contacto}'."
-
-        # 6. MODO NORMAL: BÚSQUEDA INTELIGENTE CON TOLERANCIA A TYPOS
         else:
             regla_encontrada = self.buscar_regla_similar(texto_limpio)
             if regla_encontrada:
@@ -176,29 +168,45 @@ class CamilaSoberana:
         self.guardar_memoria_local()
         return respuesta
 
-if __name__ == "__main__":
-    camila = CamilaSoberana()
-    print("=== Camila de Kadima (Versión Definitiva) ===")
-    print("Escribe 'modo aprendizaje' para entrenarla o 'salir' para terminar.\n")
+def main(page: ft.Page):
+    page.title = "Camila Soberana - Kadima"
+    page.vertical_alignment = ft.MainAxisAlignment.END
     
-    while True:
-        try:
-            user_input = input("Tú: ")
-            if not user_input.strip():
-                continue
-            if user_input.lower() in ["salir", "exit"]:
-                print("Camila: Sesión finalizada de forma segura.")
-                break
-            
-            respuesta_camila = camila.procesar_pensamiento(user_input)
-            print(f"Camila: {respuesta_camila}\n")
-        except KeyboardInterrupt:
-            break
-import shutil
+    camila = CamilaSoberana()
 
-try:
-    # Esto copia automáticamente tu base de datos a la carpeta pública de Descargas del celular
-    shutil.copy("camila_kadima_db.json", "/sdcard/Download/camila_kadima_db.json")
-    print("Respaldo exportado exitosamente a la carpeta Descargas.")
-except Exception as e:
-    print(f"No se pudo exportar automáticamente: {e}")
+    chat_list = ft.ListView(expand=True, spacing=10, auto_scroll=True)
+    
+    def agregar_mensaje(remitente, texto):
+        chat_list.controls.append(
+            ft.Row([
+                ft.Text(f"{remitente}: {texto}", selectable=True)
+            ])
+        )
+        page.update()
+
+    agregar_mensaje("Camila", "¡Sistema local de Kadima activo! ¿En qué te ayudo hoy?")
+
+    user_input = ft.TextField(hint_text="Escribe un mensaje...", expand=True, on_submit=lambda e: enviar_clic(None))
+
+    def enviar_clic(e):
+        texto = user_input.value.strip()
+        if not texto:
+            return
+        
+        agregar_mensaje("Tú", texto)
+        user_input.value = ""
+        page.update()
+
+        respuesta = camila.procesar_pensamiento(texto)
+        agregar_mensaje("Camila", respuesta)
+
+    enviar_btn = ft.ElevatedButton("Enviar", on_click=enviar_clic)
+
+    page.add(
+        chat_list,
+        ft.Row([user_input, enviar_btn])
+    )
+
+if __name__ == "__main__":
+    ft.app(target=main)
+                
