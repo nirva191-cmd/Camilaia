@@ -8,30 +8,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Revisar el código
+      - name: Checkout del código
         uses: actions/checkout@v4
-
-      - name: Configurar Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Instalar Flet
-        run: |
-          python -m pip install --upgrade pip
-          pip install flet
+      - name: Instalar Flet CLI
+        run: pip install flet
 
-      - name: Compilar APK
-        run: |
-          flet build apk main.py --verbose --yes
+      - name: Construir APK con Flet
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+          cache: true
+          android: true
 
-      - name: Subir APK
+      - name: Compilar APK final
+        run: flet build apk main.py --yes
+
+      - name: Subir APK generado
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
